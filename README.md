@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/snapee-logo.png" alt="Snapee logo" width="128" height="128">
+
 # Snapee
 
 **連結丟上來，AI 好價喊你來。**
