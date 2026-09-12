@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title description">
   <title id="title">Snapee 產品介紹</title>
-  <desc id="description">白底橘色的 Snapee 影片封面。連結丟上來，AI 好價喊你來。影片即將公開。</desc>
+  <desc id="description">白底橘色的 Snapee 影片封面。連結丟上來，AI 好價喊你來。點擊觀看 Demo。</desc>
   <rect x="1" y="1" width="1278" height="718" rx="32" fill="#fffaf7" stroke="#eadfd9" stroke-width="2"/>
   <text x="88" y="126" fill="#ee4d2d" font-family="Arial,sans-serif" font-size="22" letter-spacing="5">AI PRICE ALERTS</text>
   <text x="80" y="294" fill="#191715" font-family="Georgia,serif" font-weight="700" font-size="132">Snapee</text>
@@ -9,6 +9,6 @@
   <rect x="972" y="240" width="184" height="132" rx="32" fill="#ee4d2d"/>
   <path d="M1044 273 L1044 339 L1100 306 Z" fill="white"/>
   <path d="M88 558 H1192" stroke="#eadfd9" stroke-width="2"/>
-  <text x="88" y="621" fill="#706963" font-family="Arial,'PingFang TC','Noto Sans TC',sans-serif" font-size="23">產品介紹影片 · 即將公開</text>
+  <text x="88" y="621" fill="#706963" font-family="Arial,'PingFang TC','Noto Sans TC',sans-serif" font-size="23">產品介紹影片 · 點擊觀看 Demo</text>
   <text x="1192" y="621" text-anchor="end" fill="#ee4d2d" font-family="Arial,sans-serif" font-size="23">snapee.fyi</text>
 </svg>
