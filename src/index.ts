@@ -42,7 +42,7 @@ async function analyze(request: Request, env: Env) {
   try {
     const post = await fetchThreads(url);
     if (!post.ok || !post.text) throw new HttpError(422,`讀不到這則貼文（${post.reason}）`);
-    await env.DB.prepare('UPDATE jobs SET post_text=?,post_author=?,updated_at=? WHERE id=?').bind(post.text,post.author,Date.now(),id).run();
+    await env.DB.prepare('UPDATE jobs SET threads_url=?,post_text=?,post_author=?,updated_at=? WHERE id=?').bind(post.finalUrl,post.text,post.author,Date.now(),id).run();
     const intent = await extractKeyword(post.text,env);
     if (!intent.isShoppingRelated || !intent.keyword) throw new HttpError(422,'這則貼文沒有明確的購物商品，請換一則試試');
     const run = await startRun(intent.keyword,env);
