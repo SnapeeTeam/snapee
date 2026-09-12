@@ -1,0 +1,22 @@
+import { expect, it } from 'vitest';
+import { shopeeInput, failedRun } from '../src/apify';
+import { parseIntent } from '../src/llm';
+import { escapeHtml, normalizeEmail, redact } from '../src/http';
+import { mailTemplate } from '../src/email';
+import { missingSecrets } from '../src/env';
+it('uses only the accepted actor input fields', () => expect(shopeeInput('衛生紙')).toEqual({mode:'keyword',country:'tw',keyword:'衛生紙',sort:'relevancy',maxProducts:20,fetchDetail:false}));
+it.each(['FAILED','ABORTED','TIMED-OUT'])('identifies terminal run %s', status => expect(failedRun(status)).toBe(true));
+it.each(['READY','RUNNING','SUCCEEDED'])('does not fail run %s', status => expect(failedRun(status)).toBe(false));
+it('normalizes confidence percentages',()=>expect(parseIntent({isShoppingRelated:true,keyword:' 衛生紙 ',confidence:95,reasoning:'貼文提到衛生紙'})).toMatchObject({keyword:'衛生紙',confidence:.95}));
+it('clamps excessive confidence',()=>expect(parseIntent({isShoppingRelated:true,keyword:'紙',confidence:500,reasoning:''}).confidence).toBe(1));
+it('clamps negative confidence',()=>expect(parseIntent({isShoppingRelated:true,keyword:'紙',confidence:-2,reasoning:''}).confidence).toBe(0));
+it('rejects malformed intent',()=>expect(()=>parseIntent({keyword:'紙'})).toThrow());
+it.each(['a@site.com','somebody@shopee.tw','K66@GMAIL.COM'])('accepts valid email including s %s', value=>expect(normalizeEmail(value)).toBe(value.toLowerCase()));
+it.each(['not-an-email','x@','a b@a.com','a@b.c',null])('rejects invalid email %s', value=>expect(normalizeEmail(value)).toBeNull());
+it('escapes product content in email',()=>expect(escapeHtml('<script>"&')).toBe('&lt;script&gt;&quot;&amp;'));
+it('redacts credentials from upstream responses',()=>expect(redact('key private-example-value',{OPENAI_API_KEY:'private-example-value'})).toBe('key [REDACTED]'));
+it('reports missing required service credentials',()=>expect(missingSecrets({})).toEqual(['OPENAI_API_KEY','APIFY_TOKEN','RESEND_API_KEY']));
+it('uses true current price in preview and labels preview',()=>{
+ const mail=mailTemplate({id:'watch',email:'a@b.com',item_key:'1.2',keyword:'紙',base_price:150,target_price:90,status:'active',created_at:1,last_checked_at:null,last_alert_at:null},{name:'<b>紙</b>',shopee_url:'https://shopee.tw/product/1/2'},122,'target_hit',true);
+ expect(mail.subject).toContain('【預覽】');expect(mail.html).toContain('NT$122');expect(mail.html).toContain('&lt;b&gt;');expect(mail.text).toContain('並不代表已觸發降價');
+});

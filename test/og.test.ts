@@ -1,0 +1,13 @@
+import { expect, it } from 'vitest';
+import { decodeEntities, parseOg } from '../src/threads';
+const text = '只有我覺得蝦皮的衛生紙很好用嗎🤣🤣\n\n但每次都要一包一包分開下單就好麻煩';
+it('preserves the exact real post and bare handle', () => expect(parseOg(`<meta property="og:title" content="@wei898 on Threads"><meta property="og:description" content="${text}">`)).toEqual({ text, author: 'wei898', title: '@wei898 on Threads' }));
+it('accepts parenthesized handle', () => expect(parseOg('<meta property="og:title" content="Wei (@wei898) on Threads">').author).toBe('wei898'));
+it('accepts reversed attributes and single quotes', () => expect(parseOg("<meta content='hello world' property='og:description'>").text).toBe('hello world'));
+it('supports uppercase tags and attributes', () => expect(parseOg('<META PROPERTY="og:description" CONTENT="hello world">').text).toBe('hello world'));
+it('returns null for application shell', () => expect(parseOg('<html><title>Threads</title></html>').text).toBeNull());
+it('decodes HTML entities', () => expect(decodeEntities('A &amp; B &#10; &#x1f923;')).toBe('A & B \n 🤣'));
+it('retains invalid code points', () => expect(decodeEntities('&#999999999;')).toBe('&#999999999;'));
+it('retains quotes in a post', () => expect(parseOg('<meta property="og:description" content="&quot;好用&quot;的衛生紙">').text).toBe('"好用"的衛生紙'));
+it('retains a leading mention without attribution', () => expect(parseOg('<meta property="og:title" content="@wei898 on Threads"><meta property="og:description" content="@wei898 推薦的衛生紙">').text).toBe('@wei898 推薦的衛生紙'));
+it('removes explicit attribution only', () => expect(parseOg('<meta property="og:title" content="@wei898 on Threads"><meta property="og:description" content="@wei898: 好用的衛生紙">').text).toBe('好用的衛生紙'));
