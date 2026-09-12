@@ -31,6 +31,8 @@ Cloudflare token 需 Workers Scripts Edit、D1 Edit、Workers Routes Edit、Zone
 
 ## 流程與 API
 
+每次依關鍵字從蝦皮最多抓取 10 件商品（`maxProducts: 10`），適用於貼文分析與掃價。
+
 `POST /api/analyze` 接收 `{url,email}`，建立 job、抓 Threads OG、由 `gpt-5-mini` 擷取一個搜尋字詞，再啟動 `xtracto/shopee-scraper`。`GET /api/job/:id` 每 3 秒輪詢；run 成功時以 D1 transaction 一次寫入商品、價格點與完成狀態。actor 僅使用 `country:tw`、`fetchDetail:false`，不抓 Threads。
 
 `POST /api/watch` 接收 `{email,itemKey,targetPrice}`，拒絕非正整數、等於或高於現價的門檻。`DELETE /api/watch` 接收 `{email,watchId,mode}`，mode 為 `cancel` 或 `delete`，SQL 同時比對 watch ID 與 email。

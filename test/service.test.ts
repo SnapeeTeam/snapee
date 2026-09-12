@@ -4,7 +4,7 @@ import { parseIntent } from '../src/llm';
 import { escapeHtml, normalizeEmail, redact } from '../src/http';
 import { mailTemplate } from '../src/email';
 import { missingSecrets } from '../src/env';
-it('uses only the accepted actor input fields', () => expect(shopeeInput('衛生紙')).toEqual({mode:'keyword',country:'tw',keyword:'衛生紙',sort:'relevancy',maxProducts:20,fetchDetail:false}));
+it('uses only the accepted actor input fields', () => expect(shopeeInput('衛生紙')).toEqual({mode:'keyword',country:'tw',keyword:'衛生紙',sort:'relevancy',maxProducts:10,fetchDetail:false}));
 it.each(['FAILED','ABORTED','TIMED-OUT'])('identifies terminal run %s', status => expect(failedRun(status)).toBe(true));
 it.each(['READY','RUNNING','SUCCEEDED'])('does not fail run %s', status => expect(failedRun(status)).toBe(false));
 it('normalizes confidence percentages',()=>expect(parseIntent({isShoppingRelated:true,keyword:' 衛生紙 ',confidence:95,reasoning:'貼文提到衛生紙'})).toMatchObject({keyword:'衛生紙',confidence:.95}));

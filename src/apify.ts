@@ -2,7 +2,7 @@ import type { Env } from './env';
 import { serviceJson } from './http';
 export interface ActorRun { id: string; status: string; defaultDatasetId?: string; statusMessage?: string }
 export function shopeeInput(keyword: string) {
-  return { mode: 'keyword', country: 'tw', keyword, sort: 'relevancy', maxProducts: 20, fetchDetail: false };
+  return { mode: 'keyword', country: 'tw', keyword, sort: 'relevancy', maxProducts: 10, fetchDetail: false };
 }
 function endpoint(path: string, env: Env): string {
   const url = new URL('https://api.apify.com/v2/' + path);
