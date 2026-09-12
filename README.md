@@ -8,9 +8,9 @@
 
 Threads 商品探索 · 蝦皮價格監控 · 個人化降幅
 
-<a href="demo/snapee-demo.mp4"><img src="docs/assets/video-preview.svg" alt="點擊觀看 Snapee Demo 影片" width="720"></a>
+<a href="https://youtube.com/shorts/HFQ6ikks_VA"><img src="docs/assets/video-preview.svg" alt="點擊觀看 Snapee Demo 影片" width="720"></a>
 
-**[點擊觀看 Snapee Demo](demo/snapee-demo.mp4)**
+**[點擊觀看 Snapee Demo](https://youtube.com/shorts/HFQ6ikks_VA)** · **[簡報](https://github.com/SnapeeTeam/snapee/blob/main/slides/Snapee_pitch.pdf)**
 
 [體驗 Snapee](https://snapee.fyi) · [快速開始](#快速開始) · [架構與 API](docs/architecture.md) · [貢獻指南](CONTRIBUTING.md)
 
