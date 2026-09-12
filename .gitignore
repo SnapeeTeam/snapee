@@ -8,3 +8,16 @@ work/
 outputs/
 coverage/
 .DS_Store
+
+# Share only blank configuration templates.
+!.env.example
+# Local credentials, traces, database copies and temporary builds.
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+*.sqlite*
+*.db
+tmp/
+.build/

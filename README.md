@@ -1,84 +1,101 @@
+<div align="center">
+
 # Snapee
 
-連結丟上來，AI好價喊你來。
+**連結丟上來，AI 好價喊你來。**
 
-Cloudflare Workers + D1、strict TypeScript、原生 HTML/CSS/JavaScript，純函式使用 Vitest 測試。無前端框架、ORM 或額外打包工具。
+Threads 商品探索 · 蝦皮價格監控 · 個人化降幅
 
-## 開發
+[體驗 Snapee](https://snapee.fyi) · [快速開始](#快速開始) · [架構與 API](docs/architecture.md) · [貢獻指南](CONTRIBUTING.md)
+
+</div>
+
+---
+
+貼上 Threads 連結，Snapee 讀出想買的商品、從蝦皮取得最多 **10 件商品**，並在觀測價格達到你設定的門檻時寄信提醒。
+
+> **目前為黑客松原型。** Email 只用來識別帳號，尚未驗證所有權，可能被冒用讀取或修改監控。請勿用於敏感資料；詳見 [安全說明](SECURITY.md) 與 [資料處理說明](docs/privacy.md)。
+
+## 目錄
+
+- [功能](#功能)
+- [Snapee Adapt](#snapee-adapt)
+- [快速開始](#快速開始)
+- [架構](#架構)
+- [文件與參與](#文件與參與)
+- [限制與授權](#限制與授權)
+
+## 功能
+
+| 功能 | 說明 |
+| --- | --- |
+| Threads 連結分析 | 支援貼文網址與手機複製的分享連結 |
+| AI 商品意圖 | `gpt-6-astra` 擷取搜尋關鍵字 |
+| 蝦皮詢價 | 每次關鍵字最多擷取 10 件商品 |
+| 價格判斷 | `gpt-5-mini` 估計市價，以 ±10% 判斷價格偏低、適中或偏高 |
+| 降價監控 | 設定理想入手價，保留觀測走勢與 Email 提醒 |
+| Snapee Adapt | 依個人同類商品的監控設定，預填降幅與入手價 |
+
+## Snapee Adapt
+
+你的偏好，決定理想降幅。每筆有效樣本的降幅為：
+
+```text
+降幅 =（建立監控時價格 − 設定門檻）÷ 建立監控時價格
+```
+
+| 個人的有效監控樣本 | 預設降幅 |
+| --- | --- |
+| 總數少於 10 筆 | 5% |
+| 總數至少 10 筆，同類別只有 0–1 筆 | 5% |
+| 總數至少 10 筆，同類別至少 2 筆 | 同類別降幅的等權平均 |
+
+例如已有 10 筆監控，同類別兩筆降幅為 10% 與 30%，預設就是 **20%**；商品現價 NT$1,000，建議入手價為 NT$800。百分比與金額都能自行修改。樣本採該帳號目前保留的有效監控設定，包含已停止但未刪除的監控。
+
+## 快速開始
 
 ```sh
+git clone https://github.com/SnapeeTeam/snapee.git
+cd snapee
 npm ci
+cp .env.example .dev.vars
+```
+
+填入 `.dev.vars` 的服務密鑰後：
+
+```sh
 npx wrangler d1 execute snapee --local --file=./schema.sql -y
 npm run dev
 ```
 
-本機密鑰放在已忽略的 `.dev.vars`；變數名稱為 `OPENAI_API_KEY`、`APIFY_TOKEN`、`RESEND_API_KEY`。不得提交或輸出值。
+需要 Node.js 22.12+ 與 repo 存取權限。部署與完整設定見 [開發指南](docs/development.md)。
 
-## 驗證
+## 架構
 
-```sh
-npx tsc --noEmit
-npx vitest run
+```mermaid
+flowchart LR
+  U[使用者] --> W[Cloudflare Worker]
+  W --> T[Threads 貼文]
+  W --> O[OpenAI 意圖與市價估計]
+  W --> A[Apify 蝦皮商品]
+  W <--> D[(D1 價格與監控)]
+  W --> R[Resend Email 提醒]
 ```
 
-## 部署
+Strict TypeScript、原生 HTML/CSS/JavaScript、D1 與 Vitest。沒有前端框架、ORM 或額外打包工具。
 
-設定 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` 與三把服務密鑰環境變數後，執行 `bash deploy.sh`。腳本先執行型別與單元測試，沿用同名 D1、套用冪等 schema、部署 Worker，再以 stdin 設定尚未存在的密鑰。D1 ID 是公開識別值，已記錄於設定檔。
+## 文件與參與
 
-Cloudflare token 需 Workers Scripts Edit、D1 Edit、Workers Routes Edit、Zone Read，Zone Resources 涵蓋 `snapee.fyi`。不使用互動式 OAuth。
+- [開發、驗證與部署](docs/development.md)
+- [架構、API 與 Snapee Adapt](docs/architecture.md)
+- [貢獻指南](CONTRIBUTING.md)
+- [安全與漏洞回報](SECURITY.md)
+- [資料處理與第三方服務](docs/privacy.md)
 
-排程保留每三小時觸發，但 `SWEEP_ENABLED=false` 預設停用，避免不必要的 Apify 花費。
+## 限制與授權
 
-## 流程與 API
+AI 市價是估計值，並非即時市場調查；實際價格以蝦皮站上為準。運費暫以 NT$0 估算。單次觀測不宣稱歷史最低價，觀測價差不代表已完成交易的節省。
 
-每次依關鍵字從蝦皮最多抓取 10 件商品（`maxProducts: 10`），適用於貼文分析與掃價。
+排程掃價預設停用；一般帳號每小時最多分析 5 次。正式使用前需完成信箱驗證、伺服器端授權與資料保留治理。
 
-`POST /api/analyze` 接收 `{url,email}`，建立 job、抓 Threads OG、由 `gpt-6-astra` 擷取一個搜尋字詞，再啟動 `xtracto/shopee-scraper`。`GET /api/job/:id` 每 3 秒輪詢；run 成功時以 `gpt-5-mini` 估計市價，再以 D1 transaction 一次寫入商品、價格點、估價與完成狀態。actor 僅使用 `country:tw`、`fetchDetail:false`，不抓 Threads。
-
-### AI 價格合理性
-
-- `OPENAI_MODEL=gpt-6-astra`：意圖分析；`OPENAI_PRICE_MODEL=gpt-5-mini`：最多 10 件商品的一批市價估計，共用既有 OpenAI secret。
-- 估價輸入包含商品名稱、關鍵字與 item key；不提供實際售價，以減少估價被待判斷售價牽引。模型依品牌、規格、容量、包裝數量與相同販售單位估計整數新台幣市價 M。
-- 程式以整數運算比較售價 P：`0.9M ≤ P ≤ 1.1M` 標示「合理」；低於範圍為「偏低」、高於為「偏高」。兩端都包含在合理範圍內。模型不負責算百分比或覆蓋真實商品價格。
-- 規格或市價資訊不足時 M 為 null，標示「無法判斷」；估價服務失敗也會如此顯示，不阻止商品結果與監控。所有估值都標為「AI 估計值，非即時市價」，不代表實際市場調查。
-- 分析清單、監控卡片與詳情顯示估計市價、合理區間、判定與理由；舊觀測沒有估價時明確顯示尚未估計。
-- 新增 `price_assessments` 表，與觀測時間、當時價格、模型及估價時間一起留存；套用 schema 僅新增資料表，不刪改既有資料。讀取舊 job 不會重新呼叫模型，後續掃價對新觀測重新估價，不把舊估值套在新價格上。
-
-`POST /api/watch` 接收 `{email,itemKey,targetPrice}`，拒絕非正整數、等於或高於現價的門檻。`DELETE /api/watch` 接收 `{email,watchId,mode}`，mode 為 `cancel` 或 `delete`，SQL 同時比對 watch ID 與 email。
-
-`GET /api/dashboard?email=` 回傳監控、180 天內真實價格點與提醒。首次觀測不宣稱歷史低點，確認信與預覽信均不算降價提醒；累積省下是與建立監控價相比的觀測差額，並非已完成交易的節省。
-
-`POST /api/sweep` 接收 `{email}`，先收割已完成 runs，再依被監控關鍵字去重啟動。每個關鍵字 60 秒內不重啟；短時間可再呼叫以收回結果。無 email 時需診斷權限，處理全體監控。價格不變也留觀測點；達標或創新低會寄信，20 小時冷卻。寄信失敗不更新冷卻時間。狀態為 `triggered` 的監控仍繼續掃價，只有 `cancelled` 停止。
-
-## 診斷
-
-`/api/health` 公開回傳服務設定狀態、版本時間、`sourceCommit` 與寄件者。部署腳本以 Git commit 標記 Worker 版本；未提交的工作樹會加上 `-dirty`。以下端點須 `Authorization: Bearer` 帶入 `DIAG_TOKEN`，避免任意寄信及公開使用者寄信紀錄：
-
-- `GET /api/diag/threads?url=&ua=`：Worker 實際抓取的正文、作者、HTTP status、final URL、HTML 長度、登入牆資訊。
-- `GET /api/diag/email?to=`：寄測試信並回傳 Resend 原始回應。
-- `GET /api/diag/emails?email=&live=1`：留底紀錄及最多 5 封即時投遞狀態。
-- `GET /api/diag/alert-preview?email=&watchId=`：以真實現價寄出明確標示的預覽信。
-
-首次部署會自動產生缺少的診斷密鑰，保存在忽略版控的 `.dev.vars` 並送到 Wrangler secret。不可印出密鑰；既有設定會沿用。每封信均寫入 alerts，含 HTTP 回應及 429 一次重試紀錄；原始錯誤會先移除密鑰再記錄。
-
-## 驗收紀錄（2026-09-12）
-
-- `npx tsc --noEmit`、136 個純函式測試通過；`npm install` 稽核 0 vulnerabilities。
-- 正式 health：`ok:true`、`missingSecrets:[]`，具有 version、deployedAt、mailFrom。
-- 指定 `@wei898` 貼文成功擷取正文；AI 關鍵字「衛生紙 整箱」，Apify 20 件真實商品寫入 D1。
-- 確認信與預覽信均已由 Resend 回報 `delivered`。
-- 無頭 Chrome 實測 390px、1080px 各深淺模式：0 console errors、無橫向捲動，卡牌收展、走勢、關閉與分類皆可操作；20 件商品各有圖片與名稱蝦皮連結。
-- 真實 API 拒絕 1.5、0、高於現價的門檻；他人 Email 刪除回 404；確認／預覽不增加提醒 KPI。UI 停止與刪除已以本次新建的測試監控驗證，既有監控保持不變。
-- 手動掃價啟動 2 個關鍵字 runs，後續成功收割 2 組、38 筆價格點，其中 27 筆價格持平仍有留底，無外部錯誤。
-
-Email 登入依規格為 localStorage 偏好設定，並不驗證信箱所有權；知道他人 email 的人可冒用該帳號。此黑客松版本不適合存放敏感帳戶資料；正式商用應加入 Email OTP 或 magic link。一般使用者的資料操作僅以 email 做範圍比對，診斷端點另有 operator token。
-
-蝦皮 actor 未提供運費，估算為零並在 UI 揭露。既有 D1 價格歷史與監控已沿用，未刪除。cron 預設關閉；只有手動掃價會更新，開啟 `SWEEP_ENABLED=true` 後才會每三小時自動執行。依賴均鎖在 package-lock.json，沒有前端建置步驟。
-
-商品價格以蝦皮站上為準。單一觀測點不得宣稱歷史最低價。
-
-## Snapee Adapt 與分析額度
-
-Snapee Adapt 以同一 Email 目前保留的監控設定為個人偏好樣本，包含已停止但未刪除的監控；不使用其他帳號或商品價格觀測筆數。每筆降幅為 `(base_price - target_price) / base_price`。總有效樣本少於 10 筆，或同類別少於 2 筆（含只有 1 筆的情況）時預設 5%；否則使用同類別各筆降幅的等權平均。建議門檻依當前價格換算、四捨五入至整數，且至少 NT$1、低於現價。介面允許百分比與理想入手價互相換算，最後儲存使用者確認的金額。
-
-白名單由選用的 `ANALYZE_ALLOWLIST` Worker secret 設定，以逗號分隔 Email，正規化後完整比對；不要把帳號名單寫入版本控制。白名單立即免除每小時 5 次分析上限，歷史 jobs 保留，`GET /api/quota?email=` 回傳 `unlimited:true, used:0`；一般帳號仍使用原本的原子 SQL 額度檢查。這項設定不調整監控數量上限。
+目前未提供開源授權；本次文件整理不變更程式碼的授權或 repo 可見性。
