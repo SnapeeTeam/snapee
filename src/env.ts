@@ -11,6 +11,7 @@ export interface Env {
   OPENAI_PRICE_MODEL: string;
   MAIL_FROM: string;
   DIAG_TOKEN?: string;
+  ANALYZE_ALLOWLIST?: string;
 }
 
 export function missingSecrets(env: Partial<Env>): string[] {
