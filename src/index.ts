@@ -5,11 +5,12 @@ import { normalizeThreadsUrl } from './threads';
 import { extractKeyword } from './llm';
 import { failedRun, getDataset, getRun, startRun } from './apify';
 import { parseShopee } from './shopee';
-import { all, assessmentStatements, dashboard, productStatements, productView, type Alert, type Job, type StoredProduct, type Sweep, type Watch } from './db';
+import { all, assessmentStatements, dashboard, productStatements, productView, userAdaptProfile, type Alert, type Job, type StoredProduct, type Sweep, type Watch } from './db';
 import { estimateMarketPrices } from './assessment';
 import { alertKind, priceStats, validTarget, type PricePoint } from './price';
 import { emailStatus, sendEmail, sendWatchMail } from './email';
 import { normalizeEmail, readText, redact, ServiceError } from './http';
+import { isAnalysisExempt } from './quota';
 
 class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
 function json(value: unknown, status = 200) { return Response.json(value, { status, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } }); }
@@ -36,8 +37,8 @@ async function analyze(request: Request, env: Env) {
   const missing = missingSecrets(env); if (missing.length) throw new HttpError(503,'服務尚未設定：'+missing.join(', '));
   const now = Date.now(); const id = crypto.randomUUID();
   const created = await env.DB.prepare(`INSERT INTO jobs (id,email,threads_url,stage,created_at,updated_at)
-    SELECT ?,?,?,'threads_running',?,? WHERE (SELECT COUNT(*) FROM jobs WHERE email=? AND created_at>?)<5`)
-    .bind(id,owner,url,now,now,owner,now-3600000).run();
+    SELECT ?,?,?,'threads_running',?,? WHERE ?=1 OR (SELECT COUNT(*) FROM jobs WHERE email=? AND created_at>?)<5`)
+    .bind(id,owner,url,now,now,isAnalysisExempt(owner,env.ANALYZE_ALLOWLIST)?1:0,owner,now-3600000).run();
   if (!created.meta.changes) throw new HttpError(429,'每小時最多分析 5 則，請稍後再試');
   try {
     const post = await fetchThreads(url);
@@ -97,9 +98,10 @@ async function jobResult(id: string, env: Env) {
   }
   const products=[];
   if (job.stage === 'done') {
+    const profile=await userAdaptProfile(env.DB,job.email);const now=Date.now();
     const rows=await all<StoredProduct>(env.DB,`SELECT DISTINCT p.* FROM products p JOIN price_points pp ON pp.item_key=p.item_key
       WHERE pp.observed_at=? ORDER BY pp.effective_price LIMIT 20`,job.updated_at);
-    for(const p of rows) products.push(await productView(env.DB,{...p,keyword:job.keyword ?? p.keyword}));
+    for(const p of rows) products.push(await productView(env.DB,{...p,keyword:job.keyword ?? p.keyword},now,profile));
     products.sort((a,b)=>(a.stats.current??Infinity)-(b.stats.current??Infinity));
   }
   return json({jobId:job.id,stage:job.stage,postText:job.post_text,postAuthor:job.post_author,threadsUrl:job.threads_url,
@@ -261,6 +263,11 @@ export default {
         sourceCommit: env.CF_VERSION_METADATA?.tag ?? null, models:{intent:env.OPENAI_MODEL,priceAssessment:env.OPENAI_PRICE_MODEL}, mailFrom: env.MAIL_FROM }, { headers: { 'cache-control': 'no-store' } });
     }
     if(request.method==='GET' && url.pathname.startsWith('/api/diag/')) return await diagnostics(request,url,env);
+    if(request.method==='GET' && url.pathname==='/api/quota') {
+      const owner=email(url.searchParams.get('email'));const unlimited=isAnalysisExempt(owner,env.ANALYZE_ALLOWLIST);
+      const row=unlimited?null:await env.DB.prepare('SELECT COUNT(*) AS used FROM jobs WHERE email=? AND created_at>?').bind(owner,Date.now()-3600000).first<{used:number}>();
+      const used=row?.used??0;return json({unlimited,used,limit:unlimited?null:5,remaining:unlimited?null:Math.max(0,5-used),windowMinutes:60});
+    }
     if(request.method==='POST' && url.pathname==='/api/analyze') return await analyze(request,env);
     if(request.method==='POST' && url.pathname==='/api/job/cancel') return await cancelJob(request,env);
     if(request.method==='GET' && url.pathname.startsWith('/api/job/')) return await jobResult(url.pathname.slice(9),env);

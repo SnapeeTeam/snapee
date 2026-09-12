@@ -1,5 +1,6 @@
 import { classify } from './category';
-import { effectivePrice, priceCopy, priceStats, suggestTarget, type PricePoint } from './price';
+import { adaptDefault, buildAdaptProfile, type AdaptProfile } from './adapt';
+import { effectivePrice, priceCopy, priceStats, type PricePoint } from './price';
 import type { Product } from './shopee';
 import { assessmentView, type MarketEstimate, type StoredAssessment } from './assessment';
 
@@ -32,12 +33,17 @@ export function productStatements(db: D1Database, products: Product[], at: numbe
     image_url=excluded.image_url,merchant_name=excluded.merchant_name,rating=excluded.rating,review_count=excluded.review_count,last_seen_at=excluded.last_seen_at`)
     .bind(p.item_key,p.name,p.keyword,p.shopee_url,p.image_url,p.merchant_name,p.rating,p.review_count,at,at), pointStatement(db,p,at)]);
 }
-export async function productView(db: D1Database, product: StoredProduct, now = Date.now()) {
+export async function userAdaptProfile(db:D1Database,email:string):Promise<AdaptProfile> {
+  const rows=await all<{keyword:string;name:string;base_price:number;target_price:number}>(db,'SELECT w.keyword,p.name,w.base_price,w.target_price FROM watches w JOIN products p ON p.item_key=w.item_key WHERE w.email=?',email);
+  return buildAdaptProfile(rows.map(row=>({category:classify(row.keyword,row.name),basePrice:row.base_price,targetPrice:row.target_price})));
+}
+export async function productView(db: D1Database, product: StoredProduct, now = Date.now(), profile:AdaptProfile=buildAdaptProfile([])) {
   const points = await all<PricePoint & { id: number; effective_price: number }>(db,
     'SELECT id,price,shipping_fee,effective_price,observed_at FROM price_points WHERE item_key=? AND observed_at>=? ORDER BY observed_at,id', product.item_key,now-180*86400000);
   const stats = priceStats(points, now);
   const assessment=await db.prepare('SELECT * FROM price_assessments WHERE item_key=? AND observed_at=?').bind(product.item_key,stats.currentAt).first<StoredAssessment>();
-  return { ...product, points, stats, priceAssessment:assessmentView(stats.current,stats.currentAt,assessment), category: classify(product.keyword, product.name), suggestedTarget: suggestTarget(stats), priceCopy: priceCopy(stats) };
+  const category=classify(product.keyword,product.name);const adapt=adaptDefault(profile,category,stats.current);
+  return { ...product, points, stats, adapt, priceAssessment:assessmentView(stats.current,stats.currentAt,assessment), category, suggestedTarget: adapt.target, priceCopy: priceCopy(stats) };
 }
 export function assessmentStatements(db:D1Database,products:Product[],estimates:MarketEstimate[],at:number,model:string):D1PreparedStatement[] {
   return estimates.map(estimate=>{
@@ -49,9 +55,10 @@ export function assessmentStatements(db:D1Database,products:Product[],estimates:
 export async function dashboard(db: D1Database, email: string) {
   const watches = await all<Watch>(db, 'SELECT * FROM watches WHERE email=? ORDER BY created_at DESC LIMIT 100', email);
   const cards = [];
+  const profile=await userAdaptProfile(db,email);const now=Date.now();
   for (const watch of watches) {
     const product = await db.prepare('SELECT * FROM products WHERE item_key=?').bind(watch.item_key).first<StoredProduct>();
-    if (product) cards.push({ ...watch, product: await productView(db, product) });
+    if (product) cards.push({ ...watch, product: await productView(db, product,now,profile) });
   }
   const alerts = await all<Alert>(db, `SELECT * FROM alerts WHERE email=? AND kind!='watch_created' AND (detail IS NULL OR detail NOT LIKE '%"preview":true%') ORDER BY created_at DESC LIMIT 100`, email);
   const totals = await db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(saved),0) AS saved FROM

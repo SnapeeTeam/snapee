@@ -1,0 +1,16 @@
+import {expect,it} from 'vitest';
+import {adaptDefault,buildAdaptProfile,type AdaptSample} from '../src/adapt';
+const sample=(category='A',basePrice=100,targetPrice=80):AdaptSample=>({category,basePrice,targetPrice});
+const fillers=(n:number)=>Array.from({length:n},()=>sample('B'));
+it.each([0,1,9])('defaults to 5 percent below ten total samples (%s)',n=>expect(adaptDefault(buildAdaptProfile(Array.from({length:n},()=>sample())),'A',1000)).toMatchObject({target:950,discountPercent:5,source:'default'}));
+it('uses the category average at exactly ten samples',()=>expect(adaptDefault(buildAdaptProfile([sample('A',100,90),sample('A',1000,700),...fillers(8)]),'A',1000)).toMatchObject({target:800,discountPercent:20,categoryCount:2,source:'category_average'}));
+it.each([0,1])('uses 5 percent for %s category samples despite ten total',n=>expect(adaptDefault(buildAdaptProfile([...Array.from({length:n},()=>sample()),...fillers(10-n)]),'A',1000)).toMatchObject({target:950,source:'default'}));
+it('averages each percentage equally rather than weighting expensive products',()=>expect(adaptDefault(buildAdaptProfile([sample('A',100,90),sample('A',10000,5000),...fillers(8)]),'A',1000).target).toBe(700));
+it('does not mix category averages',()=>expect(adaptDefault(buildAdaptProfile([sample('A',100,90),sample('A',100,90),...fillers(8)]),'A',1000).target).toBe(900));
+it('uses all records rather than the latest hundred',()=>expect(buildAdaptProfile(fillers(150)).totalCount).toBe(150));
+it('rejects invalid historical prices',()=>expect(buildAdaptProfile([sample('A',0,1),sample('A',100,0),sample('A',100,100),sample('A',100,120),sample('A',NaN,2),sample('A',100,1.5)]).totalCount).toBe(0));
+it.each([null,0,1,-1,1.5,Infinity])('does not recommend an invalid current price %s',current=>expect(adaptDefault(buildAdaptProfile([]),'A',current).target).toBeNull());
+it('keeps the rounded price below current and at least one',()=>expect(adaptDefault(buildAdaptProfile([]),'A',2).target).toBe(1));
+it('rounds the final target to integer dollars',()=>expect(adaptDefault(buildAdaptProfile([]),'A',999).target).toBe(949));
+it('preserves percentage precision until the final price calculation',()=>expect(adaptDefault(buildAdaptProfile([sample('A',10000,8765),sample('A',10000,8765),...fillers(8)]),'A',10000).target).toBe(8765));
+it('does not mutate supplied records',()=>{const rows=[Object.freeze(sample())];buildAdaptProfile(rows);expect(rows).toEqual([sample()]);});
