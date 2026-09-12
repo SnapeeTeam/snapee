@@ -4,7 +4,9 @@ export function normalizeThreadsUrl(input: string): string | null {
     if (url.protocol !== 'https:' || url.username || url.password || url.port ||
       !['threads.net', 'www.threads.net', 'threads.com', 'www.threads.com'].includes(url.hostname)) return null;
     const match = url.pathname.match(/^\/@([a-zA-Z0-9._]+)\/post\/([a-zA-Z0-9_-]+)(?:\/|$)/);
-    return match ? `https://www.threads.com/@${match[1]}/post/${match[2]}` : null;
+    if (match) return `https://www.threads.com/@${match[1]}/post/${match[2]}`;
+    const share = url.pathname.match(/^\/share\/([a-zA-Z0-9_-]+)\/?$/);
+    return share ? `https://www.threads.com/share/${share[1]}/` : null;
   } catch { return null; }
 }
 export function decodeEntities(value: string): string {
@@ -52,6 +54,7 @@ export async function fetchThreads(input: string, ua = 'facebookexternalhit/1.1'
       if (response.status < 300 || response.status >= 400) break;
       const location = response.headers.get('location');
       if (!location) break;
+      await response.body?.cancel();
       const next = new URL(location, result.finalUrl);
       if (next.protocol !== 'https:' || next.port || next.username || next.password ||
         !['threads.com', 'www.threads.com', 'threads.net', 'www.threads.net', 'www.facebook.com', 'facebook.com'].includes(next.hostname)) {
@@ -60,6 +63,14 @@ export async function fetchThreads(input: string, ua = 'facebookexternalhit/1.1'
       result.finalUrl = next.href;
     }
     if (!response) throw new Error('fetch_failed');
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel(); result.reason = 'redirect_unresolved'; return result;
+    }
+    const canonical = normalizeThreadsUrl(result.finalUrl);
+    if (!canonical || canonical.includes('/share/')) {
+      await response.body?.cancel(); result.reason = 'post_url_unresolved'; return result;
+    }
+    result.finalUrl = canonical;
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
     let html = ''; let bytes = 0;
