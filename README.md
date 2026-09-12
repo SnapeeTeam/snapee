@@ -55,9 +55,9 @@ Cloudflare token 需 Workers Scripts Edit、D1 Edit、Workers Routes Edit、Zone
 - `npx tsc --noEmit`、136 個純函式測試通過；`npm install` 稽核 0 vulnerabilities。
 - 正式 health：`ok:true`、`missingSecrets:[]`，具有 version、deployedAt、mailFrom。
 - 指定 `@wei898` 貼文成功擷取正文；AI 關鍵字「衛生紙 整箱」，Apify 20 件真實商品寫入 D1。
-- 確認信與預覽信由 Resend 接受；預覽信已確認 `delivered`，確認信投遞狀態仍待最後確認。
+- 確認信與預覽信均已由 Resend 回報 `delivered`。
 - 無頭 Chrome 實測 390px、1080px 各深淺模式：0 console errors、無橫向捲動，卡牌收展、走勢、關閉與分類皆可操作；20 件商品各有圖片與名稱蝦皮連結。
-- 真實 API 拒絕 1.5、0、高於現價的門檻；他人 Email 刪除回 404；確認／預覽不增加提醒 KPI。
+- 真實 API 拒絕 1.5、0、高於現價的門檻；他人 Email 刪除回 404；確認／預覽不增加提醒 KPI。UI 停止與刪除已以本次新建的測試監控驗證，既有監控保持不變。
 - 手動掃價啟動 2 個關鍵字 runs，後續成功收割 2 組、38 筆價格點，其中 27 筆價格持平仍有留底，無外部錯誤。
 
 Email 登入依規格為 localStorage 偏好設定，並不驗證信箱所有權；知道他人 email 的人可冒用該帳號。此黑客松版本不適合存放敏感帳戶資料；正式商用應加入 Email OTP 或 magic link。一般使用者的資料操作僅以 email 做範圍比對，診斷端點另有 operator token。
