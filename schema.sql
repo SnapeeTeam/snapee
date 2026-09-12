@@ -46,3 +46,10 @@ CREATE TABLE IF NOT EXISTS sweeps (
   created_at INTEGER NOT NULL, collected_at INTEGER, note TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sweeps_status ON sweeps (status, created_at);
+
+CREATE TABLE IF NOT EXISTS price_assessments (
+  item_key TEXT NOT NULL, observed_at INTEGER NOT NULL,
+  assessed_price INTEGER NOT NULL, market_price INTEGER,
+  reasoning TEXT NOT NULL, model TEXT NOT NULL, estimated_at INTEGER NOT NULL,
+  PRIMARY KEY (item_key, observed_at)
+);
