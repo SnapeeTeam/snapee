@@ -46,8 +46,9 @@ async function analyze(request: Request, env: Env) {
     const intent = await extractKeyword(post.text,env);
     if (!intent.isShoppingRelated || !intent.keyword) throw new HttpError(422,'這則貼文沒有明確的購物商品，請換一則試試');
     const run = await startRun(intent.keyword,env);
-    await env.DB.prepare(`UPDATE jobs SET stage='shopee_running',keyword=?,reasoning=?,shopee_run_id=?,updated_at=? WHERE id=?`)
+    const started=await env.DB.prepare(`UPDATE jobs SET stage='shopee_running',keyword=?,reasoning=?,shopee_run_id=?,updated_at=? WHERE id=? AND stage='threads_running'`)
       .bind(intent.keyword,JSON.stringify(intent),run.id,Date.now(),id).run();
+    if(!started.meta.changes) throw new HttpError(409,'這次分析已停止，無法接續');
     return json({ jobId:id,stage:'shopee_running',keyword:intent.keyword },202);
   } catch (error) {
     const message = redact(error instanceof Error ? error.message : '分析失敗',env);
@@ -103,6 +104,16 @@ async function jobResult(id: string, env: Env) {
   }
   return json({jobId:job.id,stage:job.stage,postText:job.post_text,postAuthor:job.post_author,threadsUrl:job.threads_url,
     keyword:job.keyword,reasoning:job.reasoning,error:job.stage==='failed'?job.error:null,products});
+}
+
+async function cancelJob(request: Request, env: Env) {
+  const data=await body(request); const owner=email(data.email);
+  if(typeof data.jobId!=='string') throw new HttpError(400,'分析工作代碼不正確');
+  // Keep the row and created_at: abandoning a job does not refund its quota.
+  const result=await env.DB.prepare(`UPDATE jobs SET stage='failed',error='這次分析已由使用者放棄，無法接續；已使用的額度不會退回。',updated_at=? WHERE id=? AND email=?`)
+    .bind(Date.now(),data.jobId,owner).run();
+  if(!result.meta.changes) throw new HttpError(404,'找不到此帳號的分析工作');
+  return json({ok:true});
 }
 
 async function createWatch(request: Request, env: Env) {
@@ -251,6 +262,7 @@ export default {
     }
     if(request.method==='GET' && url.pathname.startsWith('/api/diag/')) return await diagnostics(request,url,env);
     if(request.method==='POST' && url.pathname==='/api/analyze') return await analyze(request,env);
+    if(request.method==='POST' && url.pathname==='/api/job/cancel') return await cancelJob(request,env);
     if(request.method==='GET' && url.pathname.startsWith('/api/job/')) return await jobResult(url.pathname.slice(9),env);
     if(request.method==='POST' && url.pathname==='/api/watch') return await createWatch(request,env);
     if(request.method==='DELETE' && url.pathname==='/api/watch') return await deleteWatch(request,env);
