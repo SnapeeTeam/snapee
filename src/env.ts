@@ -8,6 +8,7 @@ export interface Env {
   APIFY_SHOPEE_ACTOR: string;
   APIFY_THREADS_ACTOR: string;
   OPENAI_MODEL: string;
+  OPENAI_PRICE_MODEL: string;
   MAIL_FROM: string;
   DIAG_TOKEN?: string;
 }

@@ -33,7 +33,16 @@ Cloudflare token 需 Workers Scripts Edit、D1 Edit、Workers Routes Edit、Zone
 
 每次依關鍵字從蝦皮最多抓取 10 件商品（`maxProducts: 10`），適用於貼文分析與掃價。
 
-`POST /api/analyze` 接收 `{url,email}`，建立 job、抓 Threads OG、由 `gpt-5-mini` 擷取一個搜尋字詞，再啟動 `xtracto/shopee-scraper`。`GET /api/job/:id` 每 3 秒輪詢；run 成功時以 D1 transaction 一次寫入商品、價格點與完成狀態。actor 僅使用 `country:tw`、`fetchDetail:false`，不抓 Threads。
+`POST /api/analyze` 接收 `{url,email}`，建立 job、抓 Threads OG、由 `gpt-6-astra` 擷取一個搜尋字詞，再啟動 `xtracto/shopee-scraper`。`GET /api/job/:id` 每 3 秒輪詢；run 成功時以 `gpt-5-mini` 估計市價，再以 D1 transaction 一次寫入商品、價格點、估價與完成狀態。actor 僅使用 `country:tw`、`fetchDetail:false`，不抓 Threads。
+
+### AI 價格合理性
+
+- `OPENAI_MODEL=gpt-6-astra`：意圖分析；`OPENAI_PRICE_MODEL=gpt-5-mini`：最多 10 件商品的一批市價估計，共用既有 OpenAI secret。
+- 估價輸入包含商品名稱、關鍵字與 item key；不提供實際售價，以減少估價被待判斷售價牽引。模型依品牌、規格、容量、包裝數量與相同販售單位估計整數新台幣市價 M。
+- 程式以整數運算比較售價 P：`0.9M ≤ P ≤ 1.1M` 標示「合理」；低於範圍為「偏低」、高於為「偏高」。兩端都包含在合理範圍內。模型不負責算百分比或覆蓋真實商品價格。
+- 規格或市價資訊不足時 M 為 null，標示「無法判斷」；估價服務失敗也會如此顯示，不阻止商品結果與監控。所有估值都標為「AI 估計值，非即時市價」，不代表實際市場調查。
+- 分析清單、監控卡片與詳情顯示估計市價、合理區間、判定與理由；舊觀測沒有估價時明確顯示尚未估計。
+- 新增 `price_assessments` 表，與觀測時間、當時價格、模型及估價時間一起留存；套用 schema 僅新增資料表，不刪改既有資料。讀取舊 job 不會重新呼叫模型，後續掃價對新觀測重新估價，不把舊估值套在新價格上。
 
 `POST /api/watch` 接收 `{email,itemKey,targetPrice}`，拒絕非正整數、等於或高於現價的門檻。`DELETE /api/watch` 接收 `{email,watchId,mode}`，mode 為 `cancel` 或 `delete`，SQL 同時比對 watch ID 與 email。
 

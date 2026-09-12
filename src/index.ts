@@ -5,7 +5,8 @@ import { normalizeThreadsUrl } from './threads';
 import { extractKeyword } from './llm';
 import { failedRun, getDataset, getRun, startRun } from './apify';
 import { parseShopee } from './shopee';
-import { all, dashboard, productStatements, productView, type Alert, type Job, type StoredProduct, type Sweep, type Watch } from './db';
+import { all, assessmentStatements, dashboard, productStatements, productView, type Alert, type Job, type StoredProduct, type Sweep, type Watch } from './db';
+import { estimateMarketPrices } from './assessment';
 import { alertKind, priceStats, validTarget, type PricePoint } from './price';
 import { emailStatus, sendEmail, sendWatchMail } from './email';
 import { normalizeEmail, readText, redact, ServiceError } from './http';
@@ -75,14 +76,15 @@ async function jobResult(id: string, env: Env) {
       if (claim.meta.changes) {
         try {
           const raw = await getDataset(run.defaultDatasetId,env);
-          const products = parseShopee(raw,job.keyword ?? '');
+          const products = parseShopee(raw,job.keyword ?? '').slice(0,10);
           if (!products.length) {
             const detail = redact(JSON.stringify(raw),env);
             console.error(JSON.stringify({service:'Apify',status:200,raw:detail}));
             throw new Error('蝦皮未回傳可辨識商品，請稍後再試；診斷資料：'+detail);
           }
-          // D1 batch is transactional: samples and terminal stage commit together.
-          await env.DB.batch([...productStatements(env.DB,products,now),
+          const estimates=await estimateMarketPrices(products,env);
+          // D1 batch commits observed prices, assessments and terminal stage together.
+          await env.DB.batch([...productStatements(env.DB,products,now),...assessmentStatements(env.DB,products,estimates,now,env.OPENAI_PRICE_MODEL || 'gpt-5-mini'),
             env.DB.prepare(`UPDATE jobs SET stage='done',error=NULL,updated_at=? WHERE id=? AND error=?`).bind(now,id,lease)]);
         } catch (error) {
           await env.DB.prepare(`UPDATE jobs SET stage='failed',error=?,updated_at=? WHERE id=? AND error=?`)
@@ -170,9 +172,10 @@ async function sweep(env: Env, owner?: string) {
       const claim=await env.DB.prepare(`UPDATE sweeps SET note=?,collected_at=? WHERE id=? AND status='running' AND (note IS NULL OR collected_at<?)`)
         .bind(lease,now,row.id,now-120000).run();
       if(!claim.meta.changes) continue;
-      const raw=await getDataset(run.defaultDatasetId,env);const products=parseShopee(raw,row.keyword);
+      const raw=await getDataset(run.defaultDatasetId,env);const products=parseShopee(raw,row.keyword).slice(0,10);
       if(!products.length) throw new Error('蝦皮掃價沒有可辨識商品：'+redact(JSON.stringify(raw),env));
-      await env.DB.batch([...productStatements(env.DB,products,now),env.DB.prepare(`UPDATE sweeps SET status='collected',collected_at=?,note=NULL WHERE id=? AND note=?`).bind(now,row.id,lease)]);
+      const estimates=await estimateMarketPrices(products,env);
+      await env.DB.batch([...productStatements(env.DB,products,now),...assessmentStatements(env.DB,products,estimates,now,env.OPENAI_PRICE_MODEL || 'gpt-5-mini'),env.DB.prepare(`UPDATE sweeps SET status='collected',collected_at=?,note=NULL WHERE id=? AND note=?`).bind(now,row.id,lease)]);
       collected++;
     } catch(error) {
       const message=redact(error instanceof Error?error.message:'掃價失敗',env);errors.push(message);
@@ -244,7 +247,7 @@ export default {
       const missing = missingSecrets(env);
       return Response.json({ ok: missing.length === 0, missingSecrets: missing,
         version: env.CF_VERSION_METADATA?.id ?? 'local', deployedAt: env.CF_VERSION_METADATA?.timestamp ?? null,
-        sourceCommit: env.CF_VERSION_METADATA?.tag ?? null, mailFrom: env.MAIL_FROM }, { headers: { 'cache-control': 'no-store' } });
+        sourceCommit: env.CF_VERSION_METADATA?.tag ?? null, models:{intent:env.OPENAI_MODEL,priceAssessment:env.OPENAI_PRICE_MODEL}, mailFrom: env.MAIL_FROM }, { headers: { 'cache-control': 'no-store' } });
     }
     if(request.method==='GET' && url.pathname.startsWith('/api/diag/')) return await diagnostics(request,url,env);
     if(request.method==='POST' && url.pathname==='/api/analyze') return await analyze(request,env);

@@ -36,7 +36,8 @@
     "SWEEP_ENABLED": "false",
     "APIFY_SHOPEE_ACTOR": "xtracto/shopee-scraper",
     "APIFY_THREADS_ACTOR": "",
-    "OPENAI_MODEL": "gpt-5-mini",
+    "OPENAI_MODEL": "gpt-6-astra",
+    "OPENAI_PRICE_MODEL": "gpt-5-mini",
     "MAIL_FROM": "Snapee <no-reply@snapee.fyi>"
   }
 }

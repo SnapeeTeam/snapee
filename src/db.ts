@@ -1,6 +1,7 @@
 import { classify } from './category';
 import { effectivePrice, priceCopy, priceStats, suggestTarget, type PricePoint } from './price';
 import type { Product } from './shopee';
+import { assessmentView, type MarketEstimate, type StoredAssessment } from './assessment';
 
 export interface Job {
   id: string; email: string; threads_url: string; stage: string;
@@ -35,7 +36,15 @@ export async function productView(db: D1Database, product: StoredProduct, now = 
   const points = await all<PricePoint & { id: number; effective_price: number }>(db,
     'SELECT id,price,shipping_fee,effective_price,observed_at FROM price_points WHERE item_key=? AND observed_at>=? ORDER BY observed_at,id', product.item_key,now-180*86400000);
   const stats = priceStats(points, now);
-  return { ...product, points, stats, category: classify(product.keyword, product.name), suggestedTarget: suggestTarget(stats), priceCopy: priceCopy(stats) };
+  const assessment=await db.prepare('SELECT * FROM price_assessments WHERE item_key=? AND observed_at=?').bind(product.item_key,stats.currentAt).first<StoredAssessment>();
+  return { ...product, points, stats, priceAssessment:assessmentView(stats.current,stats.currentAt,assessment), category: classify(product.keyword, product.name), suggestedTarget: suggestTarget(stats), priceCopy: priceCopy(stats) };
+}
+export function assessmentStatements(db:D1Database,products:Product[],estimates:MarketEstimate[],at:number,model:string):D1PreparedStatement[] {
+  return estimates.map(estimate=>{
+    const p=products.find(p=>p.item_key===estimate.item_key)!;
+    return db.prepare(`INSERT INTO price_assessments (item_key,observed_at,assessed_price,market_price,reasoning,model,estimated_at) VALUES (?,?,?,?,?,?,?)`)
+      .bind(p.item_key,at,effectivePrice(p.price,p.shipping_fee),estimate.market_price,estimate.reasoning,model,Date.now());
+  });
 }
 export async function dashboard(db: D1Database, email: string) {
   const watches = await all<Watch>(db, 'SELECT * FROM watches WHERE email=? ORDER BY created_at DESC LIMIT 100', email);

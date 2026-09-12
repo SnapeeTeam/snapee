@@ -1,0 +1,25 @@
+import { expect, it } from 'vitest';
+import { assessmentView, estimateInput, parseEstimates, priceVerdict, type StoredAssessment } from '../src/assessment';
+import type { Product } from '../src/shopee';
+const product:Product={item_key:'1.2',name:'衛生紙 100 抽 10 包',keyword:'衛生紙',shopee_url:'https://shopee.tw/product/1/2',image_url:null,merchant_name:null,rating:0,review_count:0,price:100,shipping_fee:0};
+it.each([[90,100,'reasonable'],[110,100,'reasonable'],[100,100,'reasonable'],[89,100,'low'],[111,100,'high'],[1,1,'reasonable'],[99,110,'reasonable'],[121,110,'reasonable'],[98,110,'low'],[122,110,'high']] as const)('classifies %s against %s as %s',(p,m,result)=>expect(priceVerdict(p,m)).toBe(result));
+it.each([null,0,-1,1.5,NaN,Infinity])('cannot judge invalid estimate %s',m=>expect(priceVerdict(100,m)).toBe('unknown'));
+it.each([null,0,-1,1.5,NaN,Infinity])('cannot judge invalid observed price %s',p=>expect(priceVerdict(p,100)).toBe('unknown'));
+it('keeps integer comparison exact for very large valid prices',()=>expect(priceVerdict(Number.MAX_SAFE_INTEGER,Number.MAX_SAFE_INTEGER)).toBe('reasonable'));
+it('sends at most ten products without anchoring estimates to listed price',()=>{
+ const input=estimateInput(Array.from({length:12},(_,i)=>({...product,item_key:'1.'+i})));
+ expect(input).toHaveLength(10);expect(Object.keys(input[0]!)).toEqual(['item_key','name','keyword']);
+});
+it('matches returned estimates by item key',()=>expect(parseEstimates({estimates:[{item_key:'1.3',market_price:200,reasoning:'20 包'},{item_key:'1.2',market_price:100,reasoning:'10 包'}]},[product,{...product,item_key:'1.3'}]).map(r=>r.market_price)).toEqual([100,200]));
+it('accepts an explicit unknown for ambiguous variants',()=>expect(parseEstimates({estimates:[{item_key:'1.2',market_price:null,reasoning:'包裝數量不明'}]},[product])[0]?.market_price).toBeNull());
+it('marks missing estimates unknown',()=>expect(parseEstimates({estimates:[]},[product])[0]?.market_price).toBeNull());
+it.each([0,-1,1.5,Infinity,'100',undefined,1000000001])('rejects invalid estimate %s',market_price=>expect(()=>parseEstimates({estimates:[{item_key:'1.2',market_price,reasoning:'test'}]},[product])).toThrow());
+it('rejects unrelated product ids',()=>expect(()=>parseEstimates({estimates:[{item_key:'9.9',market_price:100,reasoning:'test'}]},[product])).toThrow());
+it('rejects duplicate product ids',()=>expect(()=>parseEstimates({estimates:Array(2).fill({item_key:'1.2',market_price:100,reasoning:'test'})},[product])).toThrow());
+it('rejects missing reasons',()=>expect(()=>parseEstimates({estimates:[{item_key:'1.2',market_price:100,reasoning:''}]},[product])).toThrow());
+const assessment:StoredAssessment={item_key:'1.2',observed_at:100,assessed_price:100,market_price:110,reasoning:'同規格估計',model:'gpt-5-mini',estimated_at:120};
+it('shows inclusive whole-dollar reasonable range',()=>expect(assessmentView(100,100,assessment)).toMatchObject({status:'reasonable',lower:99,upper:121,model:'gpt-5-mini'}));
+it('rounds range inward to valid whole-dollar prices',()=>expect(assessmentView(100,100,{...assessment,market_price:101})).toMatchObject({lower:91,upper:111}));
+it('does not reuse assessment for a newer price point',()=>expect(assessmentView(100,200,assessment).status).toBe('unknown'));
+it('does not reuse assessment for a different actual price',()=>expect(assessmentView(101,100,assessment).status).toBe('unknown'));
+it('handles preexisting observations without estimates',()=>expect(assessmentView(100,100,null)).toMatchObject({status:'unknown',marketPrice:null,lower:null,upper:null}));
